@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Head-Locked Video</title>
+  <style>
+    body { margin: 0; padding: 2rem; color: #eee; background: #151515; font: 18px system-ui, sans-serif; }
+    main { max-width: 42rem; margin: auto; }
+    h1 { font-size: 1.6rem; }
+    p { line-height: 1.5; }
+    button, input { font: inherit; margin: .4rem 0; }
+    #enter { padding: .7rem 1rem; }
+    #status { color: #bbb; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Head-Locked Video</h1>
+  <p>Choose a video stored on this headset. It stays local and is not uploaded. Start playback here, then press Enter VR. In VR, press the controller trigger to pause or resume.</p>
+  <input id="file" type="file" accept="video/*">
+  <p><button id="enter" disabled>Enter VR</button></p>
+  <p id="status">Choose a video to begin.</p>
+  <video id="video" playsinline crossorigin="anonymous" style="display:none"></video>
+</main>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+const file = document.querySelector('#file');
+const video = document.querySelector('#video');
+const enter = document.querySelector('#enter');
+const status = document.querySelector('#status');
+let objectUrl;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.setSize(innerWidth, innerHeight);
+renderer.xr.enabled = true;
+document.body.appendChild(renderer.domElement);
+renderer.domElement.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;display:none';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.01, 100);
+const texture = new THREE.VideoTexture(video);
+texture.colorSpace = THREE.SRGBColorSpace;
+const screen = new THREE.Mesh(
+  new THREE.PlaneGeometry(2.15, 1.21),
+  new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide })
+);
+scene.add(screen);
+
+file.addEventListener('change', async () => {
+  const chosen = file.files?.[0];
+  if (!chosen) return;
+  if (objectUrl) URL.revokeObjectURL(objectUrl);
+  objectUrl = URL.createObjectURL(chosen);
+  video.src = objectUrl;
+  video.loop = false;
+  video.controls = true;
+  try {
+    await video.play();
+    enter.disabled = false;
+    status.textContent = 'Playing. Press Enter VR when ready.';
+  } catch (e) {
+    status.textContent = 'Video loaded. Press play in the video controls, then Enter VR.';
+    enter.disabled = false;
+  }
+});
+
+enter.addEventListener('click', async () => {
+  if (!navigator.xr) {
+    status.textContent = 'WebXR is unavailable in this browser. Open this page in Meta Quest Browser over HTTPS.';
+    return;
+  }
+  try {
+    const supported = await navigator.xr.isSessionSupported('immersive-vr');
+    if (!supported) throw new Error('Immersive VR is not supported.');
+    const session = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] });
+    await renderer.xr.setSession(session);
+    document.querySelector('main').style.display = 'none';
+    renderer.domElement.style.display = 'block';
+    status.textContent = 'In VR';
+    session.addEventListener('end', () => {
+      renderer.domElement.style.display = 'none';
+      document.querySelector('main').style.display = '';
+      status.textContent = 'VR ended.';
+    });
+  } catch (e) {
+    status.textContent = 'Could not enter VR: ' + e.message;
+  }
+});
+
+renderer.xr.addEventListener('sessionstart', () => {
+  const session = renderer.xr.getSession();
+  session.addEventListener('select', () => video.paused ? video.play() : video.pause());
+});
+
+renderer.setAnimationLoop(() => {
+  if (renderer.xr.isPresenting) {
+    // Keep the screen one metre in front of the current headset pose each frame.
+    const xrCamera = renderer.xr.getCamera(camera);
+    const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(xrCamera.quaternion);
+    screen.position.copy(xrCamera.position).addScaledVector(direction, 1.0);
+    screen.quaternion.copy(xrCamera.quaternion);
+  }
+  renderer.render(scene, camera);
+});
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
