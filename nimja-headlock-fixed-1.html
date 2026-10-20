@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Nimja Head-Locked WebXR Test</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#000; color:#fff; font:16px system-ui,sans-serif; }
+  #page { position:fixed; inset:0; background:#000; }
+  #visual { display:block; width:100%; height:100%; border:0; background:#000; }
+  #panel {
+    position:fixed; z-index:5; left:12px; right:12px; top:max(12px,env(safe-area-inset-top));
+    max-height:calc(100dvh - 24px); overflow:auto; padding:16px; border-radius:14px;
+    background:rgba(20,20,28,.96); box-shadow:0 4px 24px #000a;
+  }
+  h1 { font-size:1.2rem; margin:0 0 8px; }
+  p { line-height:1.4; margin:8px 0; }
+  button, select { font:inherit; padding:10px 12px; max-width:100%; }
+  #row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:10px; }
+  #status { font-size:.9rem; color:#ffe0a6; overflow-wrap:anywhere; }
+  #toggle { position:fixed; z-index:6; right:12px; bottom:12px; border-radius:50%; width:42px; height:42px;
+    padding:0; background:#171717; color:#fff; border:1px solid #aaa; opacity:.25; }
+  #toggle:focus, #toggle:hover { opacity:1; }
+  body.panel-hidden #panel { display:none; }
+  .hint { color:#cbd5e1; font-size:.9rem; }
+</style>
+</head>
+<body>
+<div id="page">
+  <iframe id="visual" title="Nimja visual"
+    src="https://hypno.nimja.com/visual/76"
+    allow="autoplay; fullscreen; xr-spatial-tracking; gamepad"
+    allowfullscreen></iframe>
+</div>
+
+<section id="panel" aria-label="Player controls">
+  <h1>Nimja head-locked WebXR test</h1>
+  <p>Choose a visual and start it inside the page. Then try Enter VR. This version explicitly requests DOM Overlay as a <b>required</b> WebXR feature, so it won't claim success when the browser hasn't enabled it.</p>
+  <label for="visual-choice">Visual: </label>
+  <select id="visual-choice">
+    <optgroup label="Spirals">
+      <option value="154">Glass Spiral</option><option value="150">Rainbow Spiral</option>
+      <option value="141">Glitter Spiral</option><option value="139">Polar Spiral</option>
+      <option value="133">Flowing Spiral</option><option value="131">Chromatic Spiral</option>
+      <option value="121">Fuzzy Spiral</option><option value="117">Digital Spiral</option>
+      <option value="111">Spiral Words</option><option value="110">Spiral Zoom</option>
+      <option value="109">Distant Spiral</option><option value="102">Double Spiral</option>
+      <option value="100">Fractured Spiral</option><option value="76" selected>Spiral Web</option>
+      <option value="75">Particle Spiral</option><option value="57">Deep Spiral Dots</option>
+      <option value="54">Spiral Twist Flat</option><option value="53">Spiral Twist Smooth</option>
+      <option value="30">Circle Spiral</option><option value="23">Spiral Intense</option>
+      <option value="18">Soft Spiral</option><option value="9">Spiral Large (rainbow)</option>
+    </optgroup>
+    <optgroup label="Other visuals">
+      <option value="145">Aperture Spiral</option><option value="132">Spiral Corridor</option>
+      <option value="93">Pendulum Waves</option><option value="91">Enspiralment</option>
+      <option value="86">Warp Tunnel</option>
+    </optgroup>
+  </select>
+  <div id="row">
+    <button id="enter" type="button">Enter head-locked VR</button>
+    <button id="exit" type="button" hidden>Exit VR</button>
+    <a href="https://hypno.nimja.com/visual" target="_blank" rel="noopener" style="color:#bcd7ff">Nimja catalogue</a>
+  </div>
+  <p id="status" role="status" aria-live="polite">Ready. Start the visual in the embedded page first.</p>
+  <p class="hint">Important: if Quest Browser rejects the required <code>dom-overlay</code> feature for immersive VR, an ordinary HTML iframe cannot be made head-locked by JavaScript alone. The browser must support DOM Overlay for this particular approach.</p>
+</section>
+<button id="toggle" type="button" aria-label="Hide controls" title="Hide or show controls">⋯</button>
+
+<script>
+(() => {
+  'use strict';
+  const overlay = document.querySelector('#panel');
+  const status = document.querySelector('#status');
+  const enter = document.querySelector('#enter');
+  const exit = document.querySelector('#exit');
+  const toggle = document.querySelector('#toggle');
+  const choice = document.querySelector('#visual-choice');
+  const iframe = document.querySelector('#visual');
+  let session = null;
+  let starting = false;
+
+  function say(message) { status.textContent = message; }
+
+  choice.addEventListener('change', () => {
+    iframe.src = 'https://hypno.nimja.com/visual/' + encodeURIComponent(choice.value);
+    say('Visual changed. Start it inside the embedded page, then enter VR.');
+  });
+
+  toggle.addEventListener('click', () => {
+    const hidden = document.body.classList.toggle('panel-hidden');
+    toggle.setAttribute('aria-label', hidden ? 'Show controls' : 'Hide controls');
+    toggle.title = hidden ? 'Show controls' : 'Hide controls';
+  });
+
+  async function leaveSession() {
+    if (session) {
+      const current = session;
+      session = null;
+      try { await current.end(); } catch (_) {}
+    }
+  }
+
+  enter.addEventListener('click', async () => {
+    if (starting || session) return;
+    starting = true;
+    enter.disabled = true;
+
+    try {
+      if (!window.isSecureContext) {
+        throw new Error('This page must be opened over HTTPS (for example, GitHub Pages).');
+      }
+      if (!navigator.xr) {
+        throw new Error('WebXR is unavailable. Open this page in Meta Quest Browser.');
+      }
+      const supported = await navigator.xr.isSessionSupported('immersive-vr');
+      if (!supported) throw new Error('This browser/device does not support immersive-vr.');
+
+      say('Requesting an immersive VR session with DOM Overlay…');
+      // Required (not optional): if the browser cannot provide an overlay, fail
+      // here instead of entering VR with controls/content that cannot be head-locked.
+      const xrSession = await navigator.xr.requestSession('immersive-vr', {
+        requiredFeatures: ['dom-overlay'],
+        optionalFeatures: ['local-floor'],
+        domOverlay: { root: overlay }
+      });
+
+      if (!xrSession.domOverlayState) {
+        await xrSession.end();
+        throw new Error('The session started but DOM Overlay is not active. This browser cannot head-lock this HTML iframe in immersive VR.');
+      }
+
+      session = xrSession;
+      document.body.classList.add('panel-hidden');
+      toggle.hidden = true;
+      enter.hidden = true;
+      exit.hidden = false;
+      say('VR session active. DOM Overlay type: ' + (session.domOverlayState.type || 'available') + '.');
+
+      session.addEventListener('end', () => {
+        session = null;
+        document.body.classList.remove('panel-hidden');
+        toggle.hidden = false;
+        enter.hidden = false;
+        exit.hidden = true;
+        enter.disabled = false;
+        say('VR session ended.');
+      }, { once: true });
+    } catch (err) {
+      say('Could not start head-locked mode: ' + (err && err.message ? err.message : String(err)) +
+        ' If the message mentions dom-overlay/feature support, this is a browser capability limitation rather than a visual-selection problem.');
+      enter.disabled = false;
+    } finally {
+      starting = false;
+    }
+  });
+
+  exit.addEventListener('click', leaveSession);
+
+  if (!navigator.xr) {
+    say('WebXR API not detected yet. Open this page over HTTPS in Meta Quest Browser.');
+  }
+})();
+</script>
+</body>
+</html>
