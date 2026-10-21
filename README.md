@@ -1,6 +1,6 @@
 # Head-Locked Video & Visuals
 
-A browser-based head-locked video player and collection of hypnotic visual studies, made for WebXR headsets.
+A browser-based head-locked video player and collection of visual studies, made for WebXR headsets.
 
 [**Open the Visual Preview**](https://graceknott.github.io/OculusQuest2-Headlocked-VideoPlayer/visual-preview.html)
 
