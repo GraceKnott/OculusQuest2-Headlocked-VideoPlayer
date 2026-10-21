@@ -8,7 +8,6 @@ A browser-based head-locked video player and collection of hypnotic visual studi
 
 ## What’s inside
 
-- **Visual Preview** — Fuzzy Spiral, Spiral Intense, Teasing Tentacles, and Pendulum Spiral
 - **Head-locked VR** — pins the selected visual to your view
 - **Audio ambience** — local audio files with volume control
 - **Local Video Player** — plays a video selected from your device
@@ -29,6 +28,7 @@ Audio files are stored in [`audio/`](./audio/). See [`audio/CREDITS.md`](./audio
 ## Compatibility
 
 The regular preview works in modern browsers. Immersive mode requires WebXR support and a secure HTTPS connection. Audio may need to be started manually.
+Meta quest browser is compatible with [**Local Video Player**](https://graceknott.github.io/OculusQuest2-Headlocked-VideoPlayer) wheras [**Visual Studies**](https://graceknott.github.io/OculusQuest2-Headlocked-VideoPlayer/visual-preview.html) is only possible through the [**Wolvic Browser**](https://www.wolvic.net/en/).
 
 ## Project files
 
